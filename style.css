@@ -18,6 +18,12 @@ header {
 }
 
 /* Navbar Styles */
+.separator {
+    color: #f39c12; /* Bright orange for visibility */
+    font-weight: bold;
+    margin: 0 10px;
+}
+
 nav {
     background-color: #2c3e50;
     padding: 15px;
