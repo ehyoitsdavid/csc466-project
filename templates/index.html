@@ -1,0 +1,330 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Performance test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .videos { display: flex; gap: 20px; margin-bottom: 20px; }
+        video { background: #222; width: 100%; max-width: 600px; }
+        .controls { margin-bottom: 20px; }
+        .stats { font-family: monospace; white-space: pre; height: 300px; overflow: auto; padding: 10px; background: #f5f5f5; border: 1px solid #ddd; }
+        button { padding: 8px 16px; margin-right: 10px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebRTC Performance Testing platform</h1>
+        
+        <div class="controls">
+            <button id="startButton">Start call</button>
+            <button id="stopButton" disabled>End call</button>
+            <button id="collectButton" disabled>Collect state</button>
+            <label for="roomInput"></label><input type="text" id="roomInput" placeholder="Room ID" value="test-room">
+        </div>
+        
+        <div class="videos">
+            <div>
+                <h3>Local video</h3>
+                <video id="localVideo" autoplay muted playsinline></video>
+            </div>
+            <div>
+                <h3>Remote Video</h3>
+                <video id="remoteVideo" autoplay playsinline></video>
+            </div>
+        </div>
+        
+        <div>
+            <h3>WebRTC stats</h3>
+            <pre class="stats" id="stats"></pre>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.min.js"></script>
+    <script>
+        // WebRTC配置
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' }
+            ]
+        };
+        
+        // DOM元素
+        const startButton = document.getElementById('startButton');
+        const stopButton = document.getElementById('stopButton');
+        const collectButton = document.getElementById('collectButton');
+        const roomInput = document.getElementById('roomInput');
+        const localVideo = document.getElementById('localVideo');
+        const remoteVideo = document.getElementById('remoteVideo');
+        const statsOutput = document.getElementById('stats');
+        
+        // WebRTC变量
+        let localStream;
+        let peerConnection;
+        let socket;
+        let roomId;
+        let statsInterval;
+        
+        // 连接到信令服务器
+        function connectSignalingServer() {
+            socket = io.connect(window.location.origin);
+            
+            socket.on('created', (data) => {
+                console.log(`Created room: {data.room}`);
+                roomId = data.room;
+                setupLocalStream();
+            });
+            
+            socket.on('joined', (data) => {
+                console.log(`Joined room: ${data.room}`);
+                roomId = data.room;
+                setupLocalStream();
+            });
+            
+            socket.on('ready', () => {
+                console.log('Other peer reading');
+                createPeerConnection();
+                createOffer();
+            });
+            
+            socket.on('offer', (data) => {
+                console.log('Received offer');
+                handleOffer(data.sdp);
+            });
+            
+            socket.on('answer', (data) => {
+                console.log('Received answer');
+                handleAnswer(data.sdp);
+            });
+            
+            socket.on('ice_candidate', (data) => {
+                console.log('Received ICE candidate');
+                handleIceCandidate(data.candidate);
+            });
+            
+            socket.on('full', (room) => {
+                alert(`Room ${room} is full`);
+            });
+        }
+        
+        // Setup local stream
+        async function setupLocalStream() {
+            try {
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    audio: true,
+                    video: true
+                });
+                localVideo.srcObject = localStream;
+                
+                if (socket.id !== roomId) {
+                    createPeerConnection();
+                }
+            } catch (error) {
+                console.error('Error when getting stream:', error);
+            }
+        }
+        
+        // 创建对等连接
+        function createPeerConnection() {
+            peerConnection = new RTCPeerConnection(configuration);
+            
+            // 添加本地流
+            localStream.getTracks().forEach(track => {
+                peerConnection.addTrack(track, localStream);
+            });
+            
+            // Handle ICE candidates
+            peerConnection.onicecandidate = (event) => {
+                if (event.candidate) {
+                    socket.emit('ice_candidate', {
+                        room: roomId,
+                        candidate: event.candidate
+                    });
+                }
+            };
+            
+            // Handle connection state change
+            peerConnection.onconnectionstatechange = (event) => {
+                console.log('Connection state:', peerConnection.connectionState);
+                if (peerConnection.connectionState === 'connected') {
+                    collectButton.disabled = false;
+                }
+            };
+            
+            // Handle remote stream
+            peerConnection.ontrack = (event) => {
+                if (event.streams && event.streams[0]) {
+                    remoteVideo.srcObject = event.streams[0];
+                }
+            };
+            
+            stopButton.disabled = false;
+        }
+        
+        // Create and send offer
+        async function createOffer() {
+            try {
+                const offer = await peerConnection.createOffer();
+                await peerConnection.setLocalDescription(offer);
+                
+                socket.emit('offer', {
+                    room: roomId,
+                    sdp: peerConnection.localDescription
+                });
+            } catch (error) {
+                console.error('Error when creating offer:', error);
+            }
+        }
+        
+        // Handle received offer
+        async function handleOffer(sdp) {
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+                const answer = await peerConnection.createAnswer();
+                await peerConnection.setLocalDescription(answer);
+                
+                socket.emit('answer', {
+                    room: roomId,
+                    sdp: peerConnection.localDescription
+                });
+            } catch (error) {
+                console.error('Error when handling offer:', error);
+            }
+        }
+        
+        // Handle answer
+        async function handleAnswer(sdp) {
+            try {
+                await peerConnection.setRemoteDescription(new RTCSessionDescription(sdp));
+            } catch (error) {
+                console.error('Error when handling answer:', error);
+            }
+        }
+        
+        // Handle ICE Candidate
+        function handleIceCandidate(candidate) {
+            try {
+                peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+            } catch (error) {
+                console.error('Error when adding ICE candidates:', error);
+            }
+        }
+        
+        // Collect RTC Stats
+        async function collectStats() {
+            if (!peerConnection) return;
+            
+            try {
+                const stats = await peerConnection.getStats();
+                let statsOutput = '';
+                
+                // Extract and format data
+                const statsData = {
+                    timestamp: new Date().toISOString(),
+                    inbound: {},
+                    outbound: {},
+                    candidate: {},
+                    connection: {}
+                };
+                
+                stats.forEach(report => {
+                    if (report.type === 'inbound-rtp') {
+                        statsData.inbound[report.kind] = {
+                            bytesReceived: report.bytesReceived,
+                            packetsReceived: report.packetsReceived,
+                            packetsLost: report.packetsLost,
+                            jitter: report.jitter,
+                            framesDecoded: report.framesDecoded,
+                            framesDropped: report.framesDropped
+                        };
+                    } else if (report.type === 'outbound-rtp') {
+                        statsData.outbound[report.kind] = {
+                            bytesSent: report.bytesSent,
+                            packetsSent: report.packetsSent,
+                            framesEncoded: report.framesEncoded
+                        };
+                    } else if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+                        statsData.connection = {
+                            currentRoundTripTime: report.currentRoundTripTime,
+                            availableOutgoingBitrate: report.availableOutgoingBitrate,
+                            bytesReceived: report.bytesReceived,
+                            bytesSent: report.bytesSent
+                        };
+                    }
+                });
+                
+                // Send stats to server
+                await fetch('/stats', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(statsData)
+                });
+                
+                // Display stats on website
+                statsOutput.textContent = JSON.stringify(statsData, null, 2);
+            } catch (error) {
+                console.error('收集统计数据时出错:', error);
+            }
+        }
+        
+        // Event listener
+        startButton.addEventListener('click', () => {
+            roomId = roomInput.value;
+            if (!roomId) {
+                alert('Please provide a room ID.');
+                return;
+            }
+            
+            connectSignalingServer();
+            socket.emit('join', roomId);
+            startButton.disabled = true;
+        });
+        
+        stopButton.addEventListener('click', () => {
+            // Stop collecting stats
+            if (statsInterval) {
+                clearInterval(statsInterval);
+                statsInterval = null;
+            }
+            
+            // Close peer connection
+            if (peerConnection) {
+                peerConnection.close();
+                peerConnection = null;
+            }
+            
+            // Stop local stream
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+            
+            // 重置视频元素
+            localVideo.srcObject = null;
+            remoteVideo.srcObject = null;
+            
+            // Reset UI
+            startButton.disabled = false;
+            stopButton.disabled = true;
+            collectButton.disabled = true;
+            statsOutput.textContent = '';
+        });
+        
+        collectButton.addEventListener('click', () => {
+            if (!statsInterval) {
+                statsInterval = setInterval(collectStats, 1000);
+                collectButton.textContent = '停止收集';
+            } else {
+                clearInterval(statsInterval);
+                statsInterval = null;
+                collectButton.textContent = '收集统计数据';
+            }
+        });
+    </script>
+</body>
+</html>
