@@ -44,19 +44,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.min.js"></script>
     <script>
-        // DOM Elements
-        const localVideo = document.getElementById('localVideo');
-        const remoteVideo = document.getElementById('remoteVideo');
-        const createBtn = document.getElementById('createBtn');
-        const joinBtn = document.getElementById('joinBtn');
-        const leaveBtn = document.getElementById('leaveBtn');
-        const statsBtn = document.getElementById('statsBtn');
-        const downloadBtn = document.getElementById('downloadBtn');
-        const roomInput = document.getElementById('roomInput');
-        const statusElem = document.getElementById('status');
-        const statsElem = document.getElementById('stats');
-
-        // WebRTC Configuration
+        // WebRTC配置
         const configuration = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' }
@@ -75,6 +63,7 @@
         // WebRTC变量
         let localStream;
         let peerConnection;
+        let socket;
         let roomId;
         let statsInterval;
 
@@ -83,7 +72,7 @@
             socket = io.connect(window.location.origin);
 
             socket.on('created', (data) => {
-                console.log(`Created room: {data.room}`);
+                console.log(`Created room: ${data.room}`);
                 roomId = data.room;
                 setupLocalStream();
             });
@@ -278,7 +267,7 @@
                 // Display stats on website
                 statsOutput.textContent = JSON.stringify(statsData, null, 2);
             } catch (error) {
-                console.error('收集统计数据时出错:', error);
+                console.error('Error while collecting data:', error);
             }
         }
 
@@ -314,7 +303,7 @@
                 localStream = null;
             }
 
-            // 重置视频元素
+            // Reset video elements
             localVideo.srcObject = null;
             remoteVideo.srcObject = null;
 
@@ -328,11 +317,11 @@
         collectButton.addEventListener('click', () => {
             if (!statsInterval) {
                 statsInterval = setInterval(collectStats, 1000);
-                collectButton.textContent = '停止收集';
+                collectButton.textContent = 'Stop collecting';
             } else {
                 clearInterval(statsInterval);
                 statsInterval = null;
-                collectButton.textContent = '收集统计数据';
+                collectButton.textContent = 'Collect statistics';
             }
         });
     </script>
