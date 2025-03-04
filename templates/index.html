@@ -78,8 +78,8 @@
     </div>
 
     <div class="controls">
-        <button id="statsBtn">Get Statistics</button>
-        <button id="downloadBtn">Download Statistics</button>
+        <button id="statsBtn">Get Stats</button>
+        <button id="downloadBtn">Download Stats</button>
     </div>
 
     <h3>WebRTC Statistics</h3>
@@ -87,7 +87,7 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <script>
-        // DOM elements
+        // DOM Elements
         const localVideo = document.getElementById('localVideo');
         const remoteVideo = document.getElementById('remoteVideo');
         const createBtn = document.getElementById('createBtn');
@@ -99,61 +99,79 @@
         const statusElem = document.getElementById('status');
         const statsElem = document.getElementById('stats');
 
-        // Update status
+        // WebRTC Configuration
+        const configuration = {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' }
+            ]
+        };
+
+        let socket;
+        let localStream;
+        let peerConnection;
+        let roomId;
+        let isInitiator = false;
+        let statsInterval;
+        let allStats = [];
+
+        function init() {
+            socket = io();
+            socket.on('connect', () => {
+                updateStatus('Connected to signaling server');
+            });
+            socket.on('disconnect', () => {
+                updateStatus('Disconnected from signaling server');
+                hangup();
+            });
+            socket.on('created', (data) => {
+                roomId = data.room;
+                isInitiator = true;
+                updateStatus(`Created Room: ${roomId}, waiting for others to join...`);
+                setupLocalMedia();
+            });
+            socket.on('joined', (data) => {
+                roomId = data.room;
+                isInitiator = false;
+                updateStatus(`Joined Room: ${roomId}`);
+                setupLocalMedia();
+            });
+            socket.on('full', (data) => {
+                updateStatus(`Room ${data.room} is full`);
+            });
+            socket.on('ready', () => {
+                if (isInitiator) {
+                    createPeerConnection();
+                    sendOffer();
+                }
+            });
+            socket.on('offer', (data) => {
+                if (!isInitiator && !peerConnection) {
+                    createPeerConnection();
+                }
+                handleOffer(data.sdp);
+            });
+            socket.on('answer', (data) => {
+                handleAnswer(data.sdp);
+            });
+            socket.on('candidate', (data) => {
+                handleCandidate(data.candidate);
+            });
+            socket.on('peer_left', () => {
+                updateStatus('Peer has left the room');
+                hangup();
+            });
+            createBtn.addEventListener('click', createRoom);
+            joinBtn.addEventListener('click', joinRoom);
+            leaveBtn.addEventListener('click', leaveRoom);
+            statsBtn.addEventListener('click', collectStats);
+            downloadBtn.addEventListener('click', downloadStats);
+        }
         function updateStatus(message) {
             statusElem.textContent = `Status: ${message}`;
             console.log(message);
         }
-
-        // Handle peer left
-        socket.on('peer_left', () => {
-            updateStatus('The other party has left the room');
-            hangup();
-        });
-
-        // Room full
-        socket.on('full', (data) => {
-            updateStatus(`Room ${data.room} is full`);
-        });
-
-        // Create Room
-        function createRoom() {
-            const room = roomInput.value.trim();
-            socket.emit('create_or_join', { room });
-        }
-
-        // Join Room
-        function joinRoom() {
-            const room = roomInput.value.trim();
-            if (!room) {
-                updateStatus('Please enter a room ID');
-                return;
-            }
-            socket.emit('create_or_join', { room });
-        }
-
-        // Leave Room
-        function leaveRoom() {
-            if (roomId) {
-                socket.emit('leave', { room: roomId });
-                hangup();
-                updateStatus('Left the room');
-
-                // Reset UI
-                createBtn.disabled = false;
-                joinBtn.disabled = false;
-                leaveBtn.disabled = true;
-            }
-        }
-
-        // Download Statistics
-        function downloadStats() {
-            if (allStats.length === 0) {
-                updateStatus('No statistics available for download');
-                return;
-            }
-            updateStatus('Statistics downloaded');
-        }
+        window.onload = init;
     </script>
 </body>
 </html>
