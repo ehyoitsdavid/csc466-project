@@ -44,14 +44,14 @@
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.min.js"></script>
     <script>
-        // WebRTC配置
+        // WebRTC config
         const configuration = {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' }
             ]
         };
 
-        // DOM元素
+        // DOM element
         const startButton = document.getElementById('startButton');
         const stopButton = document.getElementById('stopButton');
         const collectButton = document.getElementById('collectButton');
@@ -60,14 +60,14 @@
         const remoteVideo = document.getElementById('remoteVideo');
         const statsOutput = document.getElementById('stats');
 
-        // WebRTC变量
+        // WebRTC variables
         let localStream;
         let peerConnection;
         let socket;
         let roomId;
         let statsInterval;
 
-        // 连接到信令服务器
+        // Connect to signaling server
         function connectSignalingServer() {
             socket = io.connect(window.location.origin);
 
@@ -99,7 +99,7 @@
                 handleAnswer(data.sdp);
             });
 
-            socket.on('ice_candidate', (data) => {
+            socket.on('candidate', (data) => {
                 console.log('Received ICE candidate');
                 handleIceCandidate(data.candidate);
             });
@@ -126,11 +126,9 @@
             }
         }
 
-        // 创建对等连接
         function createPeerConnection() {
             peerConnection = new RTCPeerConnection(configuration);
 
-            // 添加本地流
             localStream.getTracks().forEach(track => {
                 peerConnection.addTrack(track, localStream);
             });
