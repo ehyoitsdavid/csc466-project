@@ -118,6 +118,7 @@ def handle_disconnect():
                 del rooms[room_id]
                 print(f"Room {room_id} has been cleared")
 
+
 def main():
     socketio.run(app)
 
