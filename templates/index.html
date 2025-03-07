@@ -237,7 +237,7 @@
     function joinRoom() {
         const room = roomInput.value.trim();
         if (!room) {
-            updateStatus('请输入房间ID');
+            updateStatus('Please input room ID.');
             return;
         }
         socket.emit('create_or_join', {room});
@@ -268,16 +268,13 @@
                     peerConnection.addTrack(track, localStream);
                 });
             }
-
-            // 设置事件处理程序
             peerConnection.onicecandidate = handleIceCandidate;
             peerConnection.ontrack = handleRemoteTrack;
             peerConnection.oniceconnectionstatechange = handleIceConnectionStateChange;
-
-            updateStatus('创建了对等连接');
+            updateStatus('Created peer connection.');
         } catch (error) {
-            updateStatus(`创建对等连接失败: ${error.message}`);
-            console.error('创建PeerConnection失败:', error);
+            updateStatus(`Failed to create peer connection: ${error.message}`);
+            console.error('Failed to create peer connection:', error);
         }
     }
 
@@ -449,7 +446,7 @@
             }
 
             // Post to server
-            fetch('/api/stats', {
+            fetch('/stats', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
