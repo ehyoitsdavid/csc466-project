@@ -154,7 +154,7 @@
         });
 
         socket.on('full', (data) => {
-            updateStatus(`房间 ${data.room} 已满`);
+            updateStatus(`Room ${data.room} is full`);
         });
 
         socket.on('ready', () => {
